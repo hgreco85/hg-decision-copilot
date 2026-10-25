@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HG Decision Copilot</title>
+<style>
+:root { --bg:#0e1116; --panel:#161b22; --line:#2a313c; --text:#e6e8eb; --muted:#8b949e; --accent:#2fb5a5; --warn:#e3b341; --bad:#f0883e; }
+* { box-sizing: border-box; }
+html, body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; overflow-x:hidden; }
+header { padding:16px 20px 4px; }
+h1 { margin:0; font-size:20px; letter-spacing:.2px; }
+h2 { font-size:15px; margin:18px 0 8px; color:var(--accent); }
+.tag { margin:4px 0 0; color:var(--muted); }
+main { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:20px; padding:12px 20px 24px; }
+@media (max-width:820px){ main { grid-template-columns:minmax(0,1fr); } }
+section { min-width:0; }
+textarea { width:100%; min-height:300px; resize:vertical; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+label { display:block; color:var(--muted); margin-bottom:6px; }
+label.inline { display:inline-flex; align-items:center; gap:6px; margin:0; }
+.controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:10px; }
+button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer; font:inherit; }
+button.primary { background:var(--accent); color:#04201c; border-color:var(--accent); font-weight:600; }
+button:disabled { opacity:.4; cursor:default; }
+input[type=number] { width:56px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:3px 5px; }
+.muted { color:var(--muted); } .small { font-size:12px; font-weight:400; }
+code { background:var(--panel); padding:0 4px; border-radius:3px; }
+.list { margin:0; padding:0; }
+ol.list { padding-left:22px; }
+.card, ol.list li { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:8px; overflow-wrap:anywhere; }
+.card.cross { border-left:3px solid var(--bad); }
+.task { margin:2px 0; } .agent { color:var(--accent); font-weight:600; }
+.why { color:var(--muted); font-size:12.5px; margin-top:4px; }
+.chip { display:inline-block; background:#1f3b38; color:#9ee6dc; border-radius:10px; padding:0 7px; margin:1px 2px; font-size:12px; }
+.badge { display:inline-block; font-size:11px; border-radius:4px; padding:0 6px; margin-left:6px; background:#3b2a12; color:var(--warn); }
+.score { float:right; color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>HG Decision Copilot</h1>
+  <p class="tag">Paste messy tasks from your AI agents. See duplicates first — then priorities and abandoned work. Runs 100% offline.</p>
+</header>
+<main>
+  <section class="input">
+    <label for="tasks">Tasks (one per line, any format)</label>
+    <textarea id="tasks" spellcheck="false" placeholder="[Codex] Write README for the parser | last: 2026-10-20 | urgencia: alta&#10;Claude: redactar README del parser (2026-10-24)&#10;..."></textarea>
+    <div class="controls">
+      <button id="analyze" class="primary">Analyze</button>
+      <button id="sample">Load sample</button>
+      <label class="inline">Abandoned after <input id="days" type="number" min="1" value="7"> days</label>
+      <label class="inline"><input id="remember" type="checkbox"> Remember input (this browser only)</label>
+    </div>
+    <div class="controls">
+      <button id="exportJson" disabled>Export JSON</button>
+      <button id="exportCsv" disabled>Export CSV</button>
+      <span id="summary" class="muted"></span>
+    </div>
+    <p class="muted small">Optional fields per line: agent (<code>[Name]</code>, <code>@name</code>, <code>Name:</code>, <code>agent:</code>), date (<code>2026-10-20</code> or <code>20/10/2026</code>), <code>estado:</code>, <code>urgencia:</code>, <code>valor:</code>, <code>impacto:</code> (alta/media/baja or 1–5). Missing data is never invented.</p>
+  </section>
+  <section class="results">
+    <h2>Duplicates across agents</h2>
+    <div id="dups" class="list"><p class="muted">Paste tasks and press Analyze.</p></div>
+    <h2>Priorities <span class="muted small">valor · urgencia · antigüedad · impacto — 25% each, missing data excluded</span></h2>
+    <ol id="prio" class="list"></ol>
+    <h2>Abandoned</h2>
+    <div id="aband" class="list"></div>
+  </section>
+</main>
+<script>
+// Parser: turns messy pasted text into task objects. Missing fields stay null.
+(function (root) {
+  const LEVELS = {
+    alta: 3, alto: 3, high: 3, urgente: 3, critica: 3, critical: 3,
+    media: 2, medio: 2, medium: 2, med: 2, normal: 2,
+    baja: 1, bajo: 1, low: 1,
+  };
+  const STATUS_WORDS = {
+    todo: 'todo', pendiente: 'todo', pending: 'todo',
+    doing: 'doing', 'en curso': 'doing', 'in progress': 'doing', wip: 'doing',
+    done: 'done', hecho: 'done', terminado: 'done', completed: 'done',
+    bloqueado: 'blocked', blocked: 'blocked',
+  };
+  const FIELD_KEYS = {
+    agent: ['agente', 'agent', 'owner', 'responsable'],
+    date: ['last', 'ultima', 'última', 'fecha', 'updated', 'last activity', 'ultima actividad', 'última actividad'],
+    status: ['estado', 'status'],
+    urgency: ['urgencia', 'urgency', 'u'],
+    value: ['valor', 'value', 'v'],
+    impact: ['impacto', 'impact', 'i'],
+  };
+
+  function level(raw) {
+    if (raw == null) return null;
+    const s = String(raw).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (/^[1-5]$/.test(s)) return Number(s) <= 2 ? 1 : Number(s) === 3 ? 2 : 3;
+    return LEVELS[s] || null;
+  }
+
+  function parseDate(s) {
+    let m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (m) return valid(+m[1], +m[2], +m[3]);
+    m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/); // DD/MM/YYYY (AR convention)
+    if (m) return valid(+m[3], +m[2], +m[1]);
+    return null;
+  }
+  function valid(y, mo, d) {
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  function keyFor(k) {
+    const n = k.trim().toLowerCase();
+    for (const [field, keys] of Object.entries(FIELD_KEYS)) if (keys.includes(n)) return field;
+    return null;
+  }
+
+  function parseLine(line, id) {
+    const raw = line;
+    let s = line.replace(/^\s*(?:[-*•]|\d+[.)]|\[[ x]\])\s+/i, '').trim();
+    const t = { id, raw, text: '', agent: null, lastActivity: null, status: null, urgency: null, value: null, impact: null };
+
+    // Split into segments on | or ; — first non-field segment is the text.
+    const segs = s.split(/\s*[|;]\s*/);
+    const textParts = [];
+    for (const seg of segs) {
+      const kv = seg.match(/^([A-Za-zÁÉÍÓÚáéíóúñ ]{1,20})\s*[:=]\s*(.+)$/);
+      const field = kv && keyFor(kv[1]);
+      if (field) { assign(t, field, kv[2]); continue; }
+      textParts.push(seg);
+    }
+    s = textParts.join(' ');
+
+    // [Agent] or (Agent) prefix, @agent mention, "Agent:" prefix
+    let m = s.match(/^\[([^\]]{1,30})\]\s*/) || s.match(/^\(([^)]{1,30})\)\s*/);
+    if (m && !t.agent) { t.agent = m[1].trim(); s = s.slice(m[0].length); }
+    m = s.match(/(^|\s)@([\w.-]{2,30})/);
+    if (m && !t.agent) { t.agent = m[2]; s = s.replace(m[0], ' '); }
+    m = s.match(/^([A-Z][\w.-]{1,20}(?: [A-Z][\w.-]{1,20})?):\s+/);
+    if (m && !t.agent && !keyFor(m[1])) { t.agent = m[1]; s = s.slice(m[0].length); }
+
+    // Inline key:value tokens inside text (e.g. "urgencia:alta")
+    s = s.replace(/\b(urgencia|urgency|valor|value|impacto|impact|estado|status)\s*[:=]\s*([\wáéíóú-]+)/gi, (all, k, v) => { assign(t, keyFor(k), v); return ' '; });
+
+    if (!t.lastActivity) {
+      const d = parseDate(s);
+      if (d) { t.lastActivity = d; s = s.replace(/\(?\b(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})\b\)?/, ' '); }
+    }
+    if (!t.status) {
+      const sm = s.match(/\b(TODO|DOING|DONE|WIP|BLOCKED)\b/) || s.match(/[—–-]\s*(hecho|bloqueado|pendiente|done|blocked|wip)\s*$/i);
+      if (sm) { t.status = STATUS_WORDS[sm[1].toLowerCase()]; s = s.replace(sm[0], ' '); }
+    }
+    t.text = s.replace(/\s+/g, ' ').replace(/^[\s,:—–-]+|[\s,:—–-]+$/g, '').trim();
+    return t;
+  }
+
+  function assign(t, field, v) {
+    v = String(v).trim();
+    if (field === 'agent') t.agent = v;
+    else if (field === 'date') t.lastActivity = parseDate(v);
+    else if (field === 'status') t.status = STATUS_WORDS[v.toLowerCase()] || v.toLowerCase();
+    else t[field] = level(v);
+  }
+
+  function parseTasks(text) {
+    return String(text || '').split(/\r?\n/)
+      .map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+      .map((l, i) => parseLine(l, i + 1))
+      .filter((t) => t.text.length > 0);
+  }
+
+  const api = { parseTasks, parseLine, parseDate, level };
+  root.DC = Object.assign(root.DC || {}, api);
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Prioritizer: valor, urgencia, antigüedad, impacto — 25% each, missing data excluded (never invented).
+(function (root) {
+  const WEIGHTS = { value: 0.25, urgency: 0.25, age: 0.25, impact: 0.25 };
+  const AGE_CAP_DAYS = 30;
+  const LABEL = { value: 'valor', urgency: 'urgencia', age: 'antigüedad', impact: 'impacto' };
+
+  function daysBetween(iso, today) {
+    const a = Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+    const b = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10));
+    return Math.round((b - a) / 86400000);
+  }
+
+  function scoreTask(t, today) {
+    const parts = {};
+    if (t.value != null) parts.value = (t.value - 1) / 2;
+    if (t.urgency != null) parts.urgency = (t.urgency - 1) / 2;
+    if (t.impact != null) parts.impact = (t.impact - 1) / 2;
+    if (t.lastActivity) parts.age = Math.min(Math.max(daysBetween(t.lastActivity, today), 0), AGE_CAP_DAYS) / AGE_CAP_DAYS;
+    const keys = Object.keys(parts);
+    if (!keys.length) return { taskId: t.id, score: null, coverage: 0, parts, missing: Object.keys(WEIGHTS) };
+    const wsum = keys.reduce((s, k) => s + WEIGHTS[k], 0);
+    const score = keys.reduce((s, k) => s + parts[k] * WEIGHTS[k], 0) / wsum;
+    return {
+      taskId: t.id,
+      score: Math.round(score * 100),
+      coverage: keys.length,
+      parts,
+      missing: Object.keys(WEIGHTS).filter((k) => !(k in parts)),
+    };
+  }
+
+  function prioritize(tasks, opts = {}) {
+    const today = opts.today || new Date().toISOString().slice(0, 10);
+    return tasks.filter((t) => t.status !== 'done').map((t) => scoreTask(t, today))
+      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.coverage - a.coverage || a.taskId - b.taskId);
+  }
+
+  const api = { prioritize, scoreTask, daysBetween, WEIGHTS, LABEL };
+  root.DC = Object.assign(root.DC || {}, api);
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Duplicate Detector (kernel): deterministic normalized shared-word comparison.
+(function (root) {
+  const STOP = new Set((
+    // Spanish
+    'el la los las un una unos unas de del al a en y o u que con por para sin sobre se su sus es son lo le les mi tu este esta estos estas ese esa eso ya no si mas muy como pero tambien hay nuevo nueva nuevos ' +
+    // English
+    'the a an of to in on for and or with by from at is are be it this that these those as into our my your new ' +
+    // generic task verbs / filler (irrelevant for identity of the work)
+    'fix arreglar corregir add agregar anadir update actualizar revisar review hacer do make crear create check chequear ver mejorar improve implementar implement terminar finish task tarea pendiente todo please porfa urgente asap'
+  ).split(/\s+/));
+
+  // Tiny deterministic ES->EN canonical map so the same work in two languages shares words.
+  const CANON = {
+    redactar: 'write', escribir: 'write', documentar: 'document', paso: 'step', migrar: 'migrate', reporte: 'report',
+    informe: 'report', resumen: 'summary', semanal: 'weekly', prueba: 'test', error: 'bug', factura: 'invoice',
+    panel: 'dashboard', contrato: 'contract', proveedor: 'vendor', ajuste: 'setting', configuracion: 'setting',
+  };
+
+  function normalize(s) {
+    return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9#\s-]/g, ' ').replace(/-/g, ' ');
+  }
+  function stem(w) {
+    if (w.length > 4 && w.endsWith('es')) return w.slice(0, -2);
+    if (w.length > 3 && w.endsWith('s')) return w.slice(0, -1);
+    return w;
+  }
+  function tokenize(s) {
+    const out = new Set();
+    for (const w of normalize(s).split(/\s+/)) {
+      if (!w || w.length < 2 || STOP.has(w)) continue;
+      const st = stem(w);
+      out.add(CANON[st] || CANON[w] || st);
+    }
+    return out;
+  }
+  function similarity(a, b) {
+    const A = a instanceof Set ? a : tokenize(a);
+    const B = b instanceof Set ? b : tokenize(b);
+    const shared = [...A].filter((x) => B.has(x));
+    const union = new Set([...A, ...B]).size;
+    return { score: union ? shared.length / union : 0, shared };
+  }
+
+  function findDuplicates(tasks, opts = {}) {
+    const threshold = opts.threshold ?? 0.6;
+    const minShared = opts.minShared ?? 2;
+    const toks = tasks.map((t) => tokenize(t.text));
+    const parent = tasks.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const pairs = [];
+    for (let i = 0; i < tasks.length; i++) {
+      for (let j = i + 1; j < tasks.length; j++) {
+        const { score, shared } = similarity(toks[i], toks[j]);
+        if (score >= threshold && shared.length >= minShared) {
+          pairs.push({ a: tasks[i].id, b: tasks[j].id, score: Math.round(score * 100) / 100, shared });
+          parent[find(i)] = find(j);
+        }
+      }
+    }
+    const byRoot = new Map();
+    tasks.forEach((t, i) => {
+      const r = find(i);
+      if (!byRoot.has(r)) byRoot.set(r, []);
+      byRoot.get(r).push(t);
+    });
+    const groups = [];
+    for (const members of byRoot.values()) {
+      if (members.length < 2) continue;
+      const ids = new Set(members.map((m) => m.id));
+      const agents = [...new Set(members.map((m) => m.agent).filter(Boolean))];
+      groups.push({
+        taskIds: members.map((m) => m.id),
+        pairs: pairs.filter((p) => ids.has(p.a)),
+        agents,
+        crossAgent: agents.length >= 2,
+      });
+    }
+    groups.sort((x, y) => (y.crossAgent - x.crossAgent) || (Math.max(...y.pairs.map((p) => p.score)) - Math.max(...x.pairs.map((p) => p.score))));
+    return groups;
+  }
+
+  const api = { normalize, tokenize, similarity, findDuplicates, STOP, CANON };
+  root.DC = Object.assign(root.DC || {}, api);
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Abandonment Checker: inactive > N days (default 7). No date => "no info", never "abandoned".
+(function (root) {
+  const daysBetween = (root.DC && root.DC.daysBetween) || (typeof require !== 'undefined' && require('./prioritize.js').daysBetween);
+  function checkAbandoned(tasks, opts = {}) {
+    const today = opts.today || new Date().toISOString().slice(0, 10);
+    const days = Number.isFinite(+opts.days) && +opts.days > 0 ? +opts.days : 7;
+    const abandoned = [], noInfo = [];
+    for (const t of tasks) {
+      if (t.status === 'done') continue;
+      if (!t.lastActivity) { noInfo.push({ taskId: t.id }); continue; }
+      const d = daysBetween(t.lastActivity, today);
+      if (d > days) abandoned.push({ taskId: t.id, days: d });
+    }
+    abandoned.sort((a, b) => b.days - a.days);
+    return { days, abandoned, noInfo };
+  }
+  const api = { checkAbandoned };
+  root.DC = Object.assign(root.DC || {}, api);
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Exporter: JSON and CSV of one analysis result.
+(function (root) {
+  function toJSON(r) { return JSON.stringify(r, null, 2); }
+  function cell(v) {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCSV(r) {
+    const groupOf = new Map();
+    r.duplicates.forEach((g, i) => g.taskIds.forEach((id) => groupOf.set(id, i + 1)));
+    const rank = new Map(r.priorities.map((p) => [p.taskId, p]));
+    const ab = new Map(r.abandoned.abandoned.map((a) => [a.taskId, a.days]));
+    const noInfo = new Set(r.abandoned.noInfo.map((a) => a.taskId));
+    const head = ['id', 'text', 'agent', 'last_activity', 'status', 'urgency', 'value', 'impact', 'duplicate_group', 'priority_score', 'criteria_used', 'abandoned_days', 'abandoned_info'];
+    const rows = r.tasks.map((t) => {
+      const p = rank.get(t.id);
+      return [t.id, t.text, t.agent, t.lastActivity, t.status, t.urgency, t.value, t.impact,
+        groupOf.get(t.id) || '', p ? (p.score ?? 'no data') : '', p ? `${p.coverage}/4` : '',
+        ab.get(t.id) ?? '', noInfo.has(t.id) ? 'no info' : ''].map(cell).join(',');
+    });
+    return [head.join(','), ...rows].join('\n');
+  }
+  const api = { toJSON, toCSV };
+  root.DC = Object.assign(root.DC || {}, api);
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+// Embedded copy of samples/messy-tasks.txt (fictional sample data) for the Load sample button.
+(function (root) {
+  root.DC = Object.assign(root.DC || {}, { SAMPLE: "# SAMPLE DATA (fictional) — messy task dump from several AI agents, mixed ES/EN and formats\n- [Codex] Write README with setup steps for the invoice parser | last: 2026-10-20 | urgencia: alta | valor: alta\nClaude: redactar README con pasos de setup del invoice parser (2026-10-24) urgencia:media\n@cursor-agent migrate billing reports to the new database schema | estado: doing | impacto: alta | 12/10/2026\nGemini: migrar reportes billing al nuevo database schema — pendiente | valor: media\n* fix login bug on mobile Safari | agent: Codex | 2026-10-23 | urgency: high | impact: high\n* fix logout bug on Android app | agent: Claude | 2026-10-22 | urgency: low\n3) Revisar contrato con proveedor de hosting | responsable: Hernán | última: 01/10/2026 | valor: alta | impacto: media\nInvestigar por qué el dashboard de métricas tarda en cargar\n[Antigravity] Add dark mode to settings page | 2026-09-30 | value: low\n[Codex] update dependencies of the scraper | DONE | 2026-09-15\nDevin: weekly summary of open PRs for the market system | last: 2026-10-24 | value: 4 | urgency: 2\n[Cursor] Weekly summary open PRs market system | 2026-10-18 | impacto: media\nPrepare demo video shot list for hackathon | urgency: alta\n" });
+})(globalThis);
+</script>
+<script>
+// Renderer + wiring. All work happens in this browser; nothing is sent anywhere.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const KEY = 'hgdc.input';
+  let last = null;
+
+  function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function who(t) { return t.agent ? `<span class="agent">${esc(t.agent)}</span> · ` : '<span class="muted">no agent</span> · '; }
+
+  function analyze() {
+    const text = $('tasks').value;
+    if ($('remember').checked) localStorage.setItem(KEY, text);
+    const tasks = DC.parseTasks(text);
+    if (!tasks.length) {
+      $('dups').innerHTML = '<p class="muted">Nothing to analyze — paste at least one task line.</p>';
+      $('prio').innerHTML = ''; $('aband').innerHTML = ''; $('summary').textContent = '';
+      last = null; setExport(false); return;
+    }
+    const day = today();
+    const duplicates = DC.findDuplicates(tasks);
+    const priorities = DC.prioritize(tasks, { today: day });
+    const abandoned = DC.checkAbandoned(tasks, { today: day, days: $('days').value });
+    last = { analyzedOn: day, tasks, duplicates, priorities, abandoned };
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    render(byId, duplicates, priorities, abandoned);
+    $('summary').textContent = `${tasks.length} tasks · ${duplicates.length} duplicate groups · ${abandoned.abandoned.length} abandoned`;
+    setExport(true);
+  }
+
+  function render(byId, duplicates, priorities, ab) {
+    $('dups').innerHTML = duplicates.length ? duplicates.map((g) => {
+      const best = g.pairs.reduce((m, p) => (p.score > m.score ? p : m));
+      return `<div class="card ${g.crossAgent ? 'cross' : ''}">
+        <span class="score">${Math.round(best.score * 100)}% similar</span>
+        ${g.crossAgent ? `<span class="badge">cross-agent: ${g.agents.map(esc).join(' vs ')}</span>` : '<span class="badge">same agent / unassigned</span>'}
+        ${g.taskIds.map((id) => `<div class="task">#${id} ${who(byId.get(id))}${esc(byId.get(id).text)}</div>`).join('')}
+        <div class="why">Why: ${best.shared.length} shared normalized words → ${best.shared.map((w) => `<span class="chip">${esc(w)}</span>`).join('')}${g.crossAgent ? ' — two agents may be doing the same work.' : ''}</div>
+      </div>`;
+    }).join('') : '<p class="muted">No duplicates found (threshold: ≥60% similarity and ≥2 shared words).</p>';
+
+    $('prio').innerHTML = priorities.map((p) => {
+      const t = byId.get(p.taskId);
+      const parts = Object.entries(p.parts).map(([k, v]) => `${DC.LABEL[k]} ${Math.round(v * 100)}`).join(' · ');
+      const miss = p.missing.map((k) => DC.LABEL[k]).join(', ');
+      return `<li><span class="score">${p.score == null ? 'no data' : p.score}</span>
+        <div class="task">${who(t)}${esc(t.text)}</div>
+        <div class="why">${p.score == null ? 'No criteria data — not scored.' : `${parts} (${p.coverage}/4 criteria)`}${miss && p.score != null ? ` · no data: ${esc(miss)}` : ''}</div></li>`;
+    }).join('');
+
+    $('aband').innerHTML = (ab.abandoned.length ? ab.abandoned.map((a) => {
+      const t = byId.get(a.taskId);
+      return `<div class="card"><span class="score">${a.days} days</span><div class="task">${who(t)}${esc(t.text)}</div><div class="why">Last activity ${esc(t.lastActivity)} — more than ${ab.days} days without activity.</div></div>`;
+    }).join('') : `<p class="muted">Nothing inactive for more than ${ab.days} days.</p>`) +
+      (ab.noInfo.length ? `<div class="why">No information (no date, not marked abandoned): ${ab.noInfo.map((n) => '#' + n.taskId + ' ' + esc(byId.get(n.taskId).text)).join(' · ')}</div>` : '');
+  }
+
+  function setExport(on) { $('exportJson').disabled = !on; $('exportCsv').disabled = !on; }
+  function download(name, type, body) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([body], { type }));
+    a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  $('analyze').addEventListener('click', analyze);
+  $('sample').addEventListener('click', () => { $('tasks').value = DC.SAMPLE; analyze(); });
+  $('days').addEventListener('change', () => last && analyze());
+  $('remember').addEventListener('change', (e) => { if (e.target.checked) localStorage.setItem(KEY, $('tasks').value); else localStorage.removeItem(KEY); });
+  $('exportJson').addEventListener('click', () => last && download('decision-copilot.json', 'application/json', DC.toJSON(last)));
+  $('exportCsv').addEventListener('click', () => last && download('decision-copilot.csv', 'text/csv', DC.toCSV(last)));
+  if (/[?  try { const saved]demo=1/.test(location.search)) { $('tasks').value = DC.SAMPLE; analyze(); }
+  else try { const saved = localStorage.getItem(KEY); if (saved) { $('tasks').value = saved; $('remember').checked = true; } } catch (e) { /* storage disabled */ }
+})();
+</script>
+</body>
+</html>

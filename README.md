@@ -13,6 +13,7 @@ It runs 100% offline. There are no APIs, no server, no dependencies, and no buil
 - Double-click `index.html`, or run `python3 -m http.server` and open http://localhost:8000.
 - Press **Load sample** to try `samples/messy-tasks.txt`. All sample data is fictional.
 - Open `index.html?demo=1` to auto-load the sample.
+- `index.html` loads its sibling `styles.css` and `src/*.js`, so keep the folder together. For a single self-contained file, use `dist/hg-decision-copilot.html`, rebuilt with `node tools/build-standalone.js`.
 
 ## Input format
 
@@ -52,6 +53,10 @@ There are 24 tests, including negative cases such as login vs logout bug, same v
 - Matching is word-based, so true synonyms outside the small map are missed.
 - Each line is treated as one task.
 - "Today" is your device's date.
+
+## Third-party
+
+`.agents/`, `.claude/`, `agent/` and `skills-lock.json` contain the Devpost *Build With AI: Basics* Learn Skill Pack (`challengepost/learn-ai-basics`, MIT). It was used to plan and build this project. It is not part of the app.
 
 ## License
 
