@@ -1,0 +1,16 @@
+# Demo video script — 2:58 (English narration + on-screen actions)
+
+Rules: only features verified by `node --test tests/` (24 pass) and by the screenshots in `evidence/`. No music. Upload to YouTube as Public.
+
+| Time | On screen | Narration |
+|---|---|---|
+| 0:00–0:12 | Title card "HG Decision Copilot", then the repo folder: `index.html`, `src/`, `tests/`, no `package.json`. | "I run several AI coding agents at once, and their task lists overlap. HG Decision Copilot is a single offline web page that shows me where they're duplicating work." |
+| 0:12–0:27 | Turn Wi-Fi off (or DevTools → Network → Offline). Double-click `index.html`; the empty dark screen loads. | "There's no server, no API, no AI service and nothing to install. I'm offline right now, and I just open the HTML file." |
+| 0:27–0:47 | Open `samples/messy-tasks.txt`, select all, copy, paste into the textarea, click **Analyze**. | "Here's a messy, fictional dump from Codex, Claude, Cursor, Gemini and Devin. It mixes Spanish and English, with different formats and some missing dates and fields. I paste it and press Analyze." |
+| 0:47–1:27 | Zoom on **Duplicates across agents**: the three cards, the "cross-agent: Codex vs Claude" badge, the % similar score and the shared-word chips. | "Duplicates come first, because that's the core. It found three groups, each assigned to two different agents. Codex was asked to write the README in English, and Claude got the same job in Spanish. The match is deterministic: it lowercases, strips accents, drops stopwords and generic verbs, maps a few Spanish words to English, and compares the shared words. Every group shows its score and the exact words that matched, so I can check why." |
+| 1:27–1:39 | Scroll to the "fix login bug" and "fix logout bug" items in Priorities. | "Similar-looking tasks aren't forced together. The login bug and the logout bug stay separate, and that's one of the negative cases in the test suite." |
+| 1:39–2:04 | **Priorities** list: the top items' breakdown line, a "no data: …" note, and the "no data" item at the bottom. | "Next is priority, a simple rule: value, urgency, age and impact, 25% each. When a criterion is missing, it's left out and labeled no data instead of being guessed. A task with no criteria at all isn't scored." |
+| 2:04–2:24 | **Abandoned** section. Change "Abandoned after" from 7 to 30, then to 3. Point at the "No information" line. | "Tasks with no activity for more than seven days are flagged, and I can change that number. Tasks without a date aren't called abandoned. They're listed as no information." |
+| 2:24–2:38 | Click **Export CSV** and open it in a spreadsheet to show the columns. Click **Export JSON**. | "Everything exports to CSV or JSON, with the duplicate group, score, criteria used and abandoned days per task." |
+| 2:38–2:46 | Tick **Remember input**, reload the page, and show the text restored. | "Saving the input is optional, and it stays in this browser's local storage." |
+| 2:46–2:58 | Terminal: `node --test tests/` showing 24 pass, 0 fail. Then the MIT license and repo URL. | "There are 24 Node tests, including the negative cases. It's open source under MIT. That's HG Decision Copilot." |
