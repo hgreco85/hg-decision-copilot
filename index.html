@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HG Decision Copilot</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>HG Decision Copilot</h1>
+  <p class="tag">Paste messy tasks from your AI agents. See duplicates first — then priorities and abandoned work. Runs 100% offline.</p>
+</header>
+<main>
+  <section class="input">
+    <label for="tasks">Tasks (one per line, any format)</label>
+    <textarea id="tasks" spellcheck="false" placeholder="[Codex] Write README for the parser | last: 2026-10-20 | urgencia: alta&#10;Claude: redactar README del parser (2026-10-24)&#10;..."></textarea>
+    <div class="controls">
+      <button id="analyze" class="primary">Analyze</button>
+      <button id="sample">Load sample</button>
+      <label class="inline">Abandoned after <input id="days" type="number" min="1" value="7"> days</label>
+      <label class="inline"><input id="remember" type="checkbox"> Remember input (this browser only)</label>
+    </div>
+    <div class="controls">
+      <button id="exportJson" disabled>Export JSON</button>
+      <button id="exportCsv" disabled>Export CSV</button>
+      <span id="summary" class="muted"></span>
+    </div>
+    <p class="muted small">Optional fields per line: agent (<code>[Name]</code>, <code>@name</code>, <code>Name:</code>, <code>agent:</code>), date (<code>2026-10-20</code> or <code>20/10/2026</code>), <code>estado:</code>, <code>urgencia:</code>, <code>valor:</code>, <code>impacto:</code> (alta/media/baja or 1–5). Missing data is never invented.</p>
+  </section>
+  <section class="results">
+    <h2>Duplicates across agents</h2>
+    <div id="dups" class="list"><p class="muted">Paste tasks and press Analyze.</p></div>
+    <h2>Priorities <span class="muted small">valor · urgencia · antigüedad · impacto — 25% each, missing data excluded</span></h2>
+    <ol id="prio" class="list"></ol>
+    <h2>Abandoned</h2>
+    <div id="aband" class="list"></div>
+  </section>
+</main>
+<script src="src/parser.js"></script>
+<script src="src/prioritize.js"></script>
+<script src="src/dedup.js"></script>
+<script src="src/abandoned.js"></script>
+<script src="src/export.js"></script>
+<script src="src/sample.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: normalization: case, accents, stopwords, generic verbs, plurals
+ok 1 - normalization: case, accents, stopwords, generic verbs, plurals
+  ---
+  duration_ms: 2.486474
+  ...
+# Subtest: reworded same task across agents is grouped with evidence
+ok 2 - reworded same task across agents is grouped with evidence
+  ---
+  duration_ms: 2.140735
+  ...
+# Subtest: deterministic: same input gives same output
+ok 3 - deterministic: same input gives same output
+  ---
+  duration_ms: 3.278266
+  ...
+# Subtest: negative: "fix login bug on mobile Safari" vs "fix logout bug on Android app" is not a duplicate
+ok 4 - negative: "fix login bug on mobile Safari" vs "fix logout bug on Android app" is not a duplicate
+  ---
+  duration_ms: 0.299657
+  ...
+# Subtest: negative: "Add dark mode to settings page" vs "Add export button to settings page" is not a duplicate
+ok 5 - negative: "Add dark mode to settings page" vs "Add export button to settings page" is not a duplicate
+  ---
+  duration_ms: 0.162121
+  ...
+# Subtest: negative: "update dependencies of the scraper" vs "update dependencies of the dashboard" is not a duplicate
+ok 6 - negative: "update dependencies of the scraper" vs "update dependencies of the dashboard" is not a duplicate
+  ---
+  duration_ms: 0.12812
+  ...
+# Subtest: negative: "Revisar contrato con proveedor de hosting" vs "Revisar contrato laboral de Juan" is not a duplicate
+ok 7 - negative: "Revisar contrato con proveedor de hosting" vs "Revisar contrato laboral de Juan" is not a duplicate
+  ---
+  duration_ms: 1.173241
+  ...
+# Subtest: negative: "Write tests" vs "Write docs" is not a duplicate
+ok 8 - negative: "Write tests" vs "Write docs" is not a duplicate
+  ---
+  duration_ms: 0.261434
+  ...
+# Subtest: negative: "deploy" vs "rollback" is not a duplicate
+ok 9 - negative: "deploy" vs "rollback" is not a duplicate
+  ---
+  duration_ms: 0.378035
+  ...
+# Subtest: negative: only one shared word is never enough even at high ratio
+ok 10 - negative: only one shared word is never enough even at high ratio
+  ---
+  duration_ms: 0.293689
+  ...
+# Subtest: sample: exactly the 3 planted duplicate groups, near-misses excluded
+ok 11 - sample: exactly the 3 planted duplicate groups, near-misses excluded
+  ---
+  duration_ms: 0.746434
+  ...
+# Subtest: text-only line is a valid task with all optional fields null
+ok 12 - text-only line is a valid task with all optional fields null
+  ---
+  duration_ms: 2.37354
+  ...
+# Subtest: pipe-separated fields are extracted
+ok 13 - pipe-separated fields are extracted
+  ---
+  duration_ms: 1.599655
+  ...
+# Subtest: Name: prefix, inline key:value and DD/MM/YYYY date
+ok 14 - Name: prefix, inline key:value and DD/MM/YYYY date
+  ---
+  duration_ms: 0.515476
+  ...
+# Subtest: @mention, status keyword and numeric levels
+ok 15 - @mention, status keyword and numeric levels
+  ---
+  duration_ms: 0.232026
+  ...
+# Subtest: multi-line paste: blank lines and \# comments skipped
+ok 16 - multi-line paste: blank lines and \# comments skipped
+  ---
+  duration_ms: 0.320183
+  ...
+# Subtest: invalid date is not invented
+ok 17 - invalid date is not invented
+  ---
+  duration_ms: 0.137255
+  ...
+# Subtest: all four criteria present: equal 25% weights
+ok 18 - all four criteria present: equal 25% weights
+  ---
+  duration_ms: 2.71562
+  ...
+# Subtest: missing criteria are excluded, not scored as zero
+ok 19 - missing criteria are excluded, not scored as zero
+  ---
+  duration_ms: 1.563784
+  ...
+# Subtest: no data at all -> score null, ranked last
+ok 20 - no data at all -> score null, ranked last
+  ---
+  duration_ms: 0.389142
+  ...
+# Subtest: done tasks are not prioritized or flagged
+ok 21 - done tasks are not prioritized or flagged
+  ---
+  duration_ms: 0.372175
+  ...
+# Subtest: abandoned: default 7 days, boundary exclusive
+ok 22 - abandoned: default 7 days, boundary exclusive
+  ---
+  duration_ms: 0.262609
+  ...
+# Subtest: abandoned threshold is configurable
+ok 23 - abandoned threshold is configurable
+  ---
+  duration_ms: 0.220305
+  ...
+# Subtest: CSV export escapes commas/quotes and marks missing data
+ok 24 - CSV export escapes commas/quotes and marks missing data
+  ---
+  duration_ms: 0.503254
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 143.174073
