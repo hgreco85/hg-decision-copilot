@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HG Decision Copilot — App Map</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:24px auto;padding:0 16px;background:#0e1116;color:#e6e8eb}h1,h2{color:#2fb5a5}code{background:#161b22;padding:0 4px;border-radius:3px}svg{max-width:100%;height:auto}.box{background:#161b22;border:1px solid #2a313c;border-radius:8px;padding:10px 14px;margin:10px 0}</style></head>
+<body>
+<h1>HG Decision Copilot — App Map</h1>
+<p>One offline page. You paste text, and plain JavaScript turns it into tasks, then duplicates, priorities and abandoned alerts. Nothing leaves the browser. Built at commit <code>0d8d04d</code>.</p>
+<h2>How it fits together</h2>
+<svg viewBox="0 0 820 170" role="img" aria-label="Paste to parser to dedup, prioritize, abandoned, to renderer and exporter">
+<g font-family="system-ui" font-size="13" fill="#e6e8eb">
+<rect x="10" y="60" width="120" height="44" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="70" y="87" text-anchor="middle">Pasted text</text>
+<rect x="170" y="60" width="130" height="44" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="235" y="80" text-anchor="middle">parser.js</text><text x="235" y="96" text-anchor="middle" font-size="11">parseTasks</text>
+<rect x="350" y="8" width="150" height="40" rx="8" fill="#161b22" stroke="#f0883e"/><text x="425" y="33" text-anchor="middle">dedup.js (kernel)</text>
+<rect x="350" y="62" width="150" height="40" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="425" y="87" text-anchor="middle">prioritize.js</text>
+<rect x="350" y="116" width="150" height="40" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="425" y="141" text-anchor="middle">abandoned.js</text>
+<rect x="550" y="40" width="120" height="40" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="610" y="65" text-anchor="middle">app.js render</text>
+<rect x="550" y="96" width="120" height="40" rx="8" fill="#161b22" stroke="#2fb5a5"/><text x="610" y="121" text-anchor="middle">export.js</text>
+<rect x="700" y="68" width="110" height="40" rx="8" fill="#161b22" stroke="#e3b341"/><text x="755" y="93" text-anchor="middle">screen / file</text>
+</g><g stroke="#8b949e" fill="none"><path d="M130 82H170M300 82L350 28M300 82H350M300 82L350 136M500 28L550 60M500 82L550 60M500 136L550 60M500 82L550 116M670 60L700 88M670 116L700 88"/></g></svg>
+<h2>Route through the code</h2>
+<div class="box"><b>1. <code>src/parser.js › parseLine</code></b>: reads one messy line. It pulls out the agent prefix, the date, <code>key: value</code> fields and status words. Anything not found stays <code>null</code>.</div>
+<div class="box"><b>2. <code>src/dedup.js › tokenize</code> then <code>findDuplicates</code></b>: normalizes words (accents, stopwords, generic verbs, ES→EN <code>CANON</code> map), scores every pair with Jaccard, and groups pairs with union-find. A pair needs a score of at least 0.6 and at least 2 shared words.</div>
+<div class="box"><b>3. <code>src/prioritize.js › scoreTask</code></b>: averages only the criteria that are present and reports the <code>missing</code> ones. With no criteria the score is <code>null</code>.</div>
+<h2>To change this, start here</h2>
+<ul>
+<li><b>How strict duplicate matching is:</b> <code>findDuplicates(tasks, { threshold, minShared })</code> in <code>src/dedup.js</code>.</li>
+<li><b>Words that should match across languages:</b> <code>CANON</code> in <code>src/dedup.js</code>. <b>Words to ignore:</b> <code>STOP</code>.</li>
+<li><b>Priority weights:</b> <code>WEIGHTS</code> in <code>src/prioritize.js</code>.</li>
+<li><b>Default abandoned days:</b> <code>checkAbandoned</code> in <code>src/abandoned.js</code> and the <code>#days</code> input in <code>index.html</code>.</li>
+<li><b>CSV columns:</b> <code>toCSV</code> in <code>src/export.js</code>.</li>
+</ul>
+<h2>A practice to reuse</h2>
+<p>Write the negative tests before you tune a matcher. Here, the login/logout and "same verb, different object" cases in <code>tests/dedup.test.js</code> showed that lowering the threshold was the wrong fix, so the cross-language word map was the safe one.</p>
+<h2>Run it</h2>
+<p>Double-click <code>index.html</code>, or open it with <code>?demo=1</code> to auto-load the sample. Run the tests with <code>node --test tests/</code>.</p>
+</body></html>
